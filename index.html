@@ -1,0 +1,1716 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Reader's Eye</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Local fallbacks scaled to the web fonts' widths (measured), so text wraps the same before
+     and after the fonts arrive and the swap does not shift the page. Line heights are fixed
+     everywhere, so width is all that needs matching. */
+  @font-face { font-family: "Cormorant Fallback"; font-style: normal; src: local("Georgia"); size-adjust: 88.5%; }
+  @font-face { font-family: "Cormorant Fallback"; font-style: italic; src: local("Georgia Italic"), local("Georgia-Italic"); size-adjust: 79.1%; }
+  @font-face { font-family: "Plex Sans Fallback"; src: local("Arial"), local("ArialMT"); size-adjust: 100.7%; }
+
+  /* Tokens from The Reader's Eye design system. Light is the gallery wall, dark the reading room. */
+  :root {
+    --ground: #e7e5e0;
+    --ground-raised: #f1efeb;
+    --rule: #cdc9c1;
+    --ink: #1b1a1f;
+    --ink-muted: #5a5650;
+    --accent: #77561f;
+    --control-border: #7d7871;
+    --hover-wash: #1b1a1f0f;
+    --selected-fill: var(--ink);
+    --on-selected: var(--ground);
+
+    --font-display: "Cormorant Garamond", "Cormorant Fallback", "Iowan Old Style", Georgia, serif;
+    --font-sans: "IBM Plex Sans", "Plex Sans Fallback", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px;
+    --space-6: 32px; --space-7: 48px; --space-8: 72px;
+    --stage-max: 1040px;
+    --measure-quote: 34ch;
+    --measure-text: 38rem;
+    --touch-min: 44px;
+    --focus-width: 2px;
+    --focus-offset: 3px;
+
+    --dur-hover: 150ms;
+    --dur-caption-out: 180ms;
+    --dur-caption-in: 360ms;
+    --dur-stagger: 60ms;
+    --ease-settle: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #111015;
+      --ground-raised: #1a191f;
+      --rule: #2e2c34;
+      --ink: #ece7dd;
+      --ink-muted: #a39d93;
+      --accent: #d2ac6e;
+      --control-border: #6e6973;
+      --hover-wash: #ece7dd14;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #111015;
+    --ground-raised: #1a191f;
+    --rule: #2e2c34;
+    --ink: #ece7dd;
+    --ink-muted: #a39d93;
+    --accent: #d2ac6e;
+    --control-border: #6e6973;
+    --hover-wash: #ece7dd14;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-display);
+    -webkit-font-smoothing: antialiased;
+  }
+  .label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 16px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+  .visually-hidden {
+    position: absolute;
+    width: 1px; height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  /* pointer devices read by hovering; touch devices read by tapping */
+  .touch-only { display: none; }
+  @media (hover: none) {
+    .touch-only { display: revert; }
+    .pointer-only { display: none; }
+  }
+
+  .wrap {
+    max-width: calc(var(--stage-max) + 2 * var(--space-4));
+    margin: 0 auto;
+    padding-block: var(--space-7) var(--space-8);
+    padding-left: max(var(--space-4), env(safe-area-inset-left, 0px));
+    padding-right: max(var(--space-4), env(safe-area-inset-right, 0px));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  header { display: grid; justify-items: center; gap: var(--space-3); text-align: center; }
+  header p { margin: 0; }
+  h1 {
+    font-weight: 500;
+    font-style: italic;
+    font-size: clamp(40px, 7vw, 72px);
+    line-height: .95;
+    letter-spacing: -.01em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .lede {
+    font-size: clamp(19px, 2.6vw, 22px);
+    line-height: 1.35;
+    color: var(--ink-muted);
+    max-width: var(--measure-text);
+    text-wrap: balance;
+  }
+
+  .stage { width: 100%; margin-top: var(--space-6); container-type: inline-size; }
+  /* three stacked canvases (skin, eye opening, lids and lashes), each redrawn only when it changes */
+  /* The stage's final size, in CSS, so the first paint (which can come before the script runs)
+     already matches what the script draws. Same formula as measure(): --eye is the eye's scale. */
+  .eye {
+    --eye: min(100cqw, max(420px, 56vh) / 0.66);
+    width: min(100cqw, 1.3 * var(--eye));
+    height: calc(0.658 * var(--eye));
+    position: relative;
+    margin: 0 auto;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    cursor: crosshair;
+  }
+  @container (max-width: 499px) {
+    .eye { --eye: 100cqw; width: 100cqw; }
+  }
+  .eye canvas { position: absolute; left: 0; top: 0; display: block; width: 100%; height: 100%; }
+  #mid { visibility: hidden; }
+  .eye:focus { outline: none; }
+  .eye:focus-visible { outline: var(--focus-width) solid var(--accent); outline-offset: var(--focus-offset); }
+
+  .hints {
+    list-style: none;
+    padding: 0;
+    margin: var(--space-5) 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-2) var(--space-5);
+    font: 15px/22px var(--font-sans);
+    color: var(--ink-muted);
+    text-align: center;
+  }
+  .hints b { color: var(--ink); font-weight: 500; }
+
+  /* the wall label: one quote, its place in the eye, its source */
+  .caption {
+    /* a first estimate of the longest quote; the script measures and only ever grows it */
+    min-height: calc(32px + 2 * var(--space-3) + 3 * 1.16 * clamp(26px, 4vw, 36px));
+    margin: var(--space-6) 0 0;
+    width: 100%;
+    display: grid;
+    justify-items: center;
+    align-content: start;
+    gap: var(--space-3);
+    text-align: center;
+  }
+  .caption > * { margin: 0; transition: opacity var(--dur-caption-in) var(--ease-settle); }
+  .caption > :nth-child(2) { transition-delay: var(--dur-stagger); }
+  .caption > :nth-child(3) { transition-delay: calc(var(--dur-stagger) * 2); }
+  .caption[data-state="leaving"] > * { opacity: 0; transition: opacity var(--dur-caption-out) var(--ease-exit); transition-delay: 0s; }
+  .caption[data-state="selected"] .caption__part { color: var(--accent); }
+  .caption blockquote {
+    font-size: clamp(26px, 4vw, 36px);
+    font-style: italic;
+    font-weight: 500;
+    line-height: 1.16;
+    max-width: var(--measure-quote);
+    text-wrap: balance;
+  }
+  .caption cite { font-style: normal; color: var(--accent); }
+
+  .controls {
+    margin-top: var(--space-7);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3) var(--space-6);
+  }
+  .swatches { display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: var(--space-1); }
+  .swatches .label { margin-right: var(--space-2); }
+  .swatch {
+    width: var(--touch-min);
+    height: var(--touch-min);
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+  }
+  .swatch span {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px var(--control-border);
+    transition: box-shadow var(--dur-hover) var(--ease-settle);
+  }
+  .swatch:hover span { box-shadow: 0 0 0 1px var(--ink); }
+  .swatch[aria-pressed="true"] span { box-shadow: 0 0 0 1px var(--control-border), 0 0 0 4px var(--ground), 0 0 0 6px var(--accent); }
+  .swatch:focus-visible { outline: var(--focus-width) solid var(--accent); outline-offset: -3px; }
+  .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3); }
+  .toggle {
+    min-height: var(--touch-min);
+    padding: 0 var(--space-5);
+    border-radius: 999px;
+    border: 1px solid var(--control-border);
+    background: transparent;
+    color: var(--ink);
+    font: 15px/22px var(--font-sans);
+    cursor: pointer;
+    transition: border-color var(--dur-hover) var(--ease-settle), background-color var(--dur-hover) var(--ease-settle);
+  }
+  .toggle:hover { border-color: var(--ink); background: var(--hover-wash); }
+  .toggle:active { opacity: .85; }
+  .toggle[aria-pressed="true"] { background: var(--selected-fill); color: var(--on-selected); border-color: var(--selected-fill); }
+  .toggle:focus-visible { outline: var(--focus-width) solid var(--accent); outline-offset: var(--focus-offset); }
+
+  details {
+    margin-top: var(--space-7);
+    width: 100%;
+    max-width: var(--measure-text);
+    border-top: 1px solid var(--rule);
+    padding-top: var(--space-2);
+  }
+  summary {
+    cursor: pointer;
+    text-align: center;
+    list-style: none;
+    min-height: var(--touch-min);
+    display: grid;
+    place-items: center;
+  }
+  summary:hover { color: var(--ink); }
+  summary:focus-visible { outline: var(--focus-width) solid var(--accent); outline-offset: var(--focus-offset); }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: " +"; }
+  details[open] summary::after { content: " −"; }
+  #list {
+    margin: var(--space-3) 0 0;
+    padding: var(--space-5) var(--space-5) var(--space-5) calc(var(--space-5) + 1.4em);
+    background: var(--ground-raised);
+    display: grid;
+    gap: var(--space-4);
+    font-size: 20px;
+    line-height: 1.4;
+  }
+  #list li::marker { font: 12px var(--font-mono); color: var(--ink-muted); }
+  #list span { display: block; margin-top: var(--space-1); font: 12px/16px var(--font-mono); letter-spacing: .06em; color: var(--ink-muted); }
+  #list cite { font-style: normal; color: var(--accent); }
+
+  @media (max-width: 499px) {
+    .caption { min-height: calc(48px + 2 * var(--space-3) + 5 * 1.16 * 26px); }
+    .wrap { padding-block: var(--space-6) var(--space-7); }
+    .controls { flex-direction: column; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .caption > *, .toggle, .swatch span { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <p class="label">Kinetic typography · woven from young adult novels</p>
+    <h1>The Reader's Eye</h1>
+    <p class="lede">Every fibre, vessel, lash and fold of this eye is a line from a book.</p>
+  </header>
+
+  <div class="stage" id="stage">
+    <div class="eye" id="eye" tabindex="0" role="img"
+      aria-label="An eye drawn entirely from lines of young adult novels. Its iris and the engraved folds of its lids each hold a quote. Use the arrow keys to read them in turn, and Enter to blink and reshuffle. Every quote is also listed below.">
+      <canvas id="back" aria-hidden="true"></canvas>
+      <canvas id="mid" aria-hidden="true"></canvas>
+      <canvas id="front" aria-hidden="true"></canvas>
+    </div>
+  </div>
+
+  <ul class="hints">
+    <li class="pointer-only"><b>Hover</b> the iris or the folds around it to read them</li>
+    <li class="pointer-only"><b>Click</b> to blink and reshuffle</li>
+    <li class="pointer-only"><b>Arrow keys</b> read it in order</li>
+    <li class="touch-only"><b>Tap</b> the eye to read it · Reshuffle below</li>
+  </ul>
+
+  <figure class="caption" id="caption" data-state="featured">
+    <p class="caption__part label" id="part"></p>
+    <blockquote id="q"></blockquote>
+    <figcaption class="label" id="src"></figcaption>
+  </figure>
+  <p class="visually-hidden" id="announce" aria-live="polite"></p>
+
+  <div class="controls">
+    <div class="swatches" id="swatches" role="group" aria-label="Iris colour">
+      <span class="label">Iris</span>
+    </div>
+    <div class="actions">
+      <button class="toggle" id="anatomy" type="button" aria-pressed="false">Anatomy</button>
+      <button class="toggle touch-only" id="reshuffle" type="button">Reshuffle</button>
+    </div>
+  </div>
+
+  <details>
+    <summary class="label">Every quote in this eye</summary>
+    <ol id="list"></ol>
+  </details>
+</main>
+
+<script>
+(() => {
+  const QUOTES = [
+    { t: "Okay? Okay.", b: "The Fault in Our Stars", a: "John Green" },
+    { t: "I fell in love the way you fall asleep: slowly, and then all at once.", b: "The Fault in Our Stars", a: "John Green" },
+    { t: "Some infinities are bigger than other infinities.", b: "The Fault in Our Stars", a: "John Green" },
+    { t: "That's the thing about pain. It demands to be felt.", b: "The Fault in Our Stars", a: "John Green" },
+    { t: "The world is not a wish-granting factory.", b: "The Fault in Our Stars", a: "John Green" },
+    { t: "If people were rain, I was drizzle and she was a hurricane.", b: "Looking for Alaska", a: "John Green" },
+    { t: "I go to seek a Great Perhaps.", b: "Looking for Alaska", a: "John Green" },
+    { t: "What a treacherous thing to believe that a person is more than a person.", b: "Paper Towns", a: "John Green" },
+    { t: "And in that moment, I swear we were infinite.", b: "The Perks of Being a Wallflower", a: "Stephen Chbosky" },
+    { t: "We accept the love we think we deserve.", b: "The Perks of Being a Wallflower", a: "Stephen Chbosky" },
+    { t: "Things change. And friends leave. Life doesn't stop for anybody.", b: "The Perks of Being a Wallflower", a: "Stephen Chbosky" },
+    { t: "I volunteer as tribute!", b: "The Hunger Games", a: "Suzanne Collins" },
+    { t: "May the odds be ever in your favor.", b: "The Hunger Games", a: "Suzanne Collins" },
+    { t: "Remember who the real enemy is.", b: "Catching Fire", a: "Suzanne Collins" },
+    { t: "Real or not real?", b: "Mockingjay", a: "Suzanne Collins" },
+    { t: "Fear doesn't shut you down; it wakes you up.", b: "Divergent", a: "Veronica Roth" },
+    { t: "Stay gold, Ponyboy. Stay gold.", b: "The Outsiders", a: "S. E. Hinton" },
+    { t: "I am haunted by humans.", b: "The Book Thief", a: "Markus Zusak" },
+    { t: "Even death has a heart.", b: "The Book Thief", a: "Markus Zusak" },
+    { t: "No mourners. No funerals.", b: "Six of Crows", a: "Leigh Bardugo" },
+    { t: "Holding Eleanor's hand was like holding a butterfly. Or a heartbeat.", b: "Eleanor & Park", a: "Rainbow Rowell" },
+    { t: "What's the point of having a voice if you're gonna be silent in those moments you shouldn't be?", b: "The Hate U Give", a: "Angie Thomas" },
+    { t: "The worst part of holding the memories is not the pain. It's the loneliness of it.", b: "The Giver", a: "Lois Lowry" },
+    { t: "When given the choice between being right or being kind, choose kind.", b: "Wonder", a: "R. J. Palacio" },
+  ];
+
+  const LASH_WORDS = ["okay", "always", "infinite", "hope", "gold", "tribute", "real", "fear", "perhaps",
+    "rain", "heartbeat", "stars", "voice", "kind", "haunted", "drizzle", "hurricane", "memory",
+    "forgive", "brave", "heart", "wish", "alive", "slowly", "wallflower", "odds", "humans", "butterfly",
+    "enemy", "funerals", "pain", "felt", "love", "friends", "silent", "deserve", "loneliness"];
+
+  const PALETTES = {
+    ivory:   { name: "Ivory",   bg: "#2b2823", outer: "#d8d0bc", inner: "#f1ead8", limbal: "#0a0908" },
+    hazel:   { name: "Hazel",   bg: "#2b2412", outer: "#94a65c", inner: "#ecb65a", limbal: "#17110a" },
+    ocean:   { name: "Ocean",   bg: "#0f1d2e", outer: "#6aa6cf", inner: "#d6e9ee", limbal: "#08111c" },
+    emerald: { name: "Emerald", bg: "#0e2219", outer: "#55b385", inner: "#dcc76c", limbal: "#06130d" },
+    umber:   { name: "Umber",   bg: "#24130a", outer: "#b46c30", inner: "#f2c47c", limbal: "#140a05" },
+    violet:  { name: "Violet",  bg: "#1a1030", outer: "#9a78d8", inner: "#eed0f3", limbal: "#0e0820" },
+  };
+
+  const SERIF = '"Cormorant Garamond", Georgia, serif';
+  const MONO = '"IBM Plex Mono", ui-monospace, monospace';
+  const TAU = Math.PI * 2;
+  const SECTORS = 8;
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // opacity tiers from the design system: only one region is ever lit
+  const TIER = { void: 0.12, texture: 0.2, structure: 0.4, stroke: 0.85, lit: 0.92 };
+  const DWELL = 8000;
+  const BAKE = 1.6;   // the pupil layer is baked this much larger so dilation stays sharp
+
+  const stage = document.getElementById("stage");
+  const eyeEl = document.getElementById("eye");
+  const backC = document.getElementById("back");
+  const midC = document.getElementById("mid");
+  const frontC = document.getElementById("front");
+  const bctx = backC.getContext("2d");
+  const ectx = midC.getContext("2d");
+  const fctx = frontC.getContext("2d");
+  const caption = document.getElementById("caption");
+  const announceEl = document.getElementById("announce");
+
+  let dpr = 1, W = 0, H = 0, E = 0, cx = 0, cy = 0, a = 0, b = 0, R = 0, pBase = 0;
+  let ex = 0, ey = 0, ew = 0, eh = 0;   // the eye opening's canvas, in stage coordinates
+  let phone = false;
+  let Pi = null, Po = null;   // inner (nasal) and outer (temporal) canthi
+  let palette = PALETTES.ivory;
+  let order = shuffled(QUOTES.map((_, i) => i));
+  let ink = "#1b1a1f", muted = "#5a5650";
+  let showLabels = false;
+  let built = false;
+
+  // cached layers and per-layout data
+  let sclera = null, scleraM = 0, pupilText = null, pupilLayer = null;
+  let stroma = null, stromaLit = null, stromaP = 0, irisSize = 0, irisFs = 6, fibres = null, ring = null;
+  let spokes = [], crypts = [], freckles = [], furrows = [];
+  let lashes = [], lashFs = 10;
+  let skin = null, regionLine = {}, regionStrips = null, hatchFs = 5;
+  let A = {};       // glyph atlases by role
+  let bakes = 0;    // bumps whenever the iris is re-baked, so the eye layer knows to redraw
+
+  // quote roles (indices into QUOTES), reassigned on every reshuffle
+  const roles = () => ({
+    sectors: order.slice(0, SECTORS),
+    orbital: order[8], crease: order[9], fold: order[10],
+    lowerFold: order[11], trough: order[12], collarette: order[13], ruff: order[14],
+  });
+  let role = roles();
+
+  // ---------- readable regions ----------
+  // Ids are "s0".."s7" for the iris sectors, then the five readable lines of the engraving, in reading order.
+  const CURVES = [
+    { key: "orbital", name: "Upper orbital fold" },
+    { key: "crease", name: "Upper lid crease" },
+    { key: "fold", name: "Upper eyelid" },
+    { key: "lowerFold", name: "Lower eyelid" },
+    { key: "trough", name: "Lower orbital fold" },
+  ];
+  const isSector = id => /^s\d$/.test(id);
+  const regionIds = () => [...Array.from({ length: SECTORS }, (_, s) => "s" + s), ...CURVES.map(c => c.key)];
+  const regionQuote = id => isSector(id) ? role.sectors[+id[1]] : role[id];
+  function regionName(id) {
+    if (isSector(id)) return "Iris · sector " + (+id[1] + 1) + " of " + SECTORS;
+    return CURVES.find(c => c.key === id).name;
+  }
+
+  // ---------- helpers ----------
+  function shuffled(arr) {
+    const out = arr.slice();
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  }
+  function hexToRgb(h) {
+    const n = parseInt(h.slice(1, 7), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function mix(c1, c2, t) {
+    const A = hexToRgb(c1), B = hexToRgb(c2);
+    return "#" + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, "0")).join("");
+  }
+  function rgba(hex, alpha) {
+    const [r, g, bl] = hexToRgb(hex);
+    return `rgba(${r},${g},${bl},${alpha})`;
+  }
+  function readTheme() {
+    const cs = getComputedStyle(document.documentElement);
+    ink = cs.getPropertyValue("--ink").trim() || ink;
+    muted = cs.getPropertyValue("--ink-muted").trim() || muted;
+  }
+  function offscreen(w, h) {
+    const c = document.createElement("canvas");
+    c.width = Math.ceil(w * dpr);
+    c.height = Math.ceil(h * dpr);
+    const x = c.getContext("2d");
+    x.scale(dpr, dpr);
+    return [c, x];
+  }
+  function sizeCanvas(c, w, h) {
+    c.width = Math.round(w * dpr);
+    c.height = Math.round(h * dpr);
+    c.style.width = w + "px";
+    c.style.height = h + "px";
+  }
+  const lerp = (p, q, t) => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
+  function cub(P, t) {
+    const u = 1 - t;
+    return {
+      x: u * u * u * P[0].x + 3 * u * u * t * P[1].x + 3 * u * t * t * P[2].x + t * t * t * P[3].x,
+      y: u * u * u * P[0].y + 3 * u * u * t * P[1].y + 3 * u * t * t * P[2].y + t * t * t * P[3].y,
+    };
+  }
+  function cubD(P, t) {
+    const u = 1 - t;
+    return {
+      x: 3 * u * u * (P[1].x - P[0].x) + 6 * u * t * (P[2].x - P[1].x) + 3 * t * t * (P[3].x - P[2].x),
+      y: 3 * u * u * (P[1].y - P[0].y) + 6 * u * t * (P[2].y - P[1].y) + 3 * t * t * (P[3].y - P[2].y),
+    };
+  }
+  const shiftCurve = (P, dy, widen = 0, dx = 0) =>
+    P.map((p, i) => ({ x: p.x + dx + (i === 0 ? -widen : i === 3 ? widen : 0), y: p.y + dy }));
+  const lerpCurve = (P, Q, t) => P.map((p, i) => lerp(p, Q[i], t));
+  const easeOut = t => 1 - Math.pow(1 - t, 3);
+  const q = (v, step) => Math.round(v / step) * step;
+
+  // ---------- glyph atlases ----------
+  // Chrome rasterizes rotated fillText glyph by glyph as paths: 700 rotated glyphs took 33ms a frame
+  // against 9ms as sprites. So each font's glyphs are set upright once, at twice device scale,
+  // and placed as rotated sprites. Colour comes from the atlas, opacity from globalAlpha.
+  function atlas(font, color, text) {
+    // italic glyphs overhang their advance, so the padding grows with the size
+    const OS = dpr * 2, pad = Math.ceil(parseFloat(font.match(/([\d.]+)px/)[1]) * 0.3) + 1;
+    const m = document.createElement("canvas").getContext("2d");
+    m.font = font;
+    const fm = m.measureText("Hg");
+    const asc = Math.ceil(fm.fontBoundingBoxAscent), desc = Math.ceil(fm.fontBoundingBoxDescent);
+    const cellH = asc + desc + pad * 2;
+    const glyph = {};
+    let x0 = 0;
+    for (const ch of new Set(text)) {
+      const w = m.measureText(ch).width;
+      glyph[ch] = { x: x0, w, cw: Math.ceil(w + pad * 2) };
+      x0 += glyph[ch].cw;
+    }
+    const c = document.createElement("canvas");
+    c.width = Math.ceil(x0 * OS);
+    c.height = Math.ceil(cellH * OS);
+    const x = c.getContext("2d");
+    x.scale(OS, OS);
+    x.font = font;
+    x.fillStyle = color;
+    for (const ch in glyph) x.fillText(ch, glyph[ch].x + pad, pad + asc);
+    // mid: shift from an alphabetic baseline to textBaseline "middle"
+    return { c, glyph, asc, pad, cellH, OS, mid: (asc - desc) / 2 };
+  }
+  // one glyph with its alphabetic origin at (dx, dy) in the current transform
+  function glyph(x, at, ch, dx, dy) {
+    const g = at.glyph[ch];
+    if (!g) return 0;
+    x.drawImage(at.c, g.x * at.OS, 0, g.cw * at.OS, at.cellH * at.OS, dx - at.pad, dy - at.pad - at.asc, g.cw, at.cellH);
+    return g.w;
+  }
+  function buildInkAtlases() {
+    A.lash = atlas(`italic 500 ${lashFs * 0.95}px ${SERIF}`, ink, LASH_WORDS.join(""));
+    A.lashBack = atlas(`italic 500 ${lashFs * 0.85}px ${SERIF}`, ink, LASH_WORDS.join(""));
+    A.lashLow = atlas(`italic 400 ${lashFs * 0.7}px ${SERIF}`, ink, LASH_WORDS.join(""));
+  }
+
+  // ---------- eyelids ----------
+  // The upper lid's closed shape is exactly the lower lid, so a blink seals cleanly.
+  function lids(o, gy) {
+    const kL = (0.9 + 0.1 * o) * (1 + 0.1 * gy);
+    const L1 = { x: cx + a * 0.52, y: cy + b * 1.18 * kL };
+    const L2 = { x: cx - a * 0.6, y: cy + b * 1.12 * kL };
+    const k = Math.max(0, Math.min(1.14, o * (1 - 0.26 * gy)));
+    const U1 = lerp(L2, { x: cx - a * 0.62, y: cy - b * 1.36 }, k);
+    const U2 = lerp(L1, { x: cx + a * 0.44, y: cy - b * 1.34 }, k);
+    return { U: [Pi, U1, U2, Po], L: [Pi, L2, L1, Po] };
+  }
+
+  // ---------- cached layers ----------
+  function buildSclera() {
+    const m = scleraM = Math.round(a * 0.25);
+    const [c, x] = offscreen(W + 2 * m, H + 2 * m);
+    x.translate(m, m);
+
+    let g = x.createRadialGradient(cx, cy, R * 0.6, cx, cy, a * 1.05);
+    g.addColorStop(0, "#f8f2e3");
+    g.addColorStop(0.55, "#efe7d2");
+    g.addColorStop(1, "#bfb49b");
+    x.fillStyle = g;
+    x.fillRect(-m, -m, W + 2 * m, H + 2 * m);
+
+    // faint ruled text: the "paper" of the globe, each row only as long as the eye is wide
+    const fs = Math.max(7, E * 0.0095);
+    const lh = fs * 1.35;
+    x.font = `italic 400 ${fs}px ${SERIF}`;
+    x.fillStyle = "rgba(40,34,26,0.1)";
+    x.textBaseline = "middle";
+    const all = shuffled(QUOTES).map(q => q.t).join("  ·  ");
+    const rowChars = Math.ceil((a * 2.6) / (fs * 0.3));
+    let off = 0;
+    for (let y = cy - b * 1.5; y < cy + b * 1.5; y += lh) {
+      off = (off + 53) % all.length;
+      const bow = Math.sin(((y - cy) / (b * 1.5)) * Math.PI / 2) * 6;
+      x.fillText((all.slice(off) + "  ·  " + all).slice(0, rowChars), cx - a * 1.2 - Math.random() * 30 + bow, y);
+    }
+
+    // conjunctival vessels: words that branch in from the corners and fade before the limbus
+    const stream = QUOTES.map(q => q.t).join("").replace(/[^A-Za-z]/g, "");
+    let si = Math.floor(Math.random() * stream.length);
+    const fs0 = Math.max(4.5, E * 0.0085);
+    // vessels become the engraver's shading strokes, drawn in ink rather than red
+    const VA = atlas(`italic 500 ${fs0 * 1.1}px ${SERIF}`, "#3a3226", stream);
+    function vessel(x0, y0, ang, len, size, depth) {
+      let px = x0, py = y0, trav = 0;
+      const path = [[px, py]];
+      const sc = size / (fs0 * 1.1);
+      x.globalAlpha = 0.08 + 0.12 * (size / fs0);
+      while (trav < len) {
+        if (Math.hypot(px - cx, py - cy) < R * 1.12) break;
+        const ch = stream[si++ % stream.length];
+        const w = VA.glyph[ch].w * sc * 0.92;
+        ang += (Math.random() - 0.5) * 0.32;
+        const co = Math.cos(ang), sn = Math.sin(ang);
+        x.setTransform(dpr * sc * co, dpr * sc * sn, -dpr * sc * sn, dpr * sc * co, dpr * (px + m), dpr * (py + m));
+        glyph(x, VA, ch, 0, VA.mid);
+        px += co * w;
+        py += sn * w;
+        trav += w;
+        path.push([px, py]);
+        if (depth < 3 && Math.random() < 0.07) {
+          vessel(px, py, ang + (Math.random() < 0.5 ? -1 : 1) * (0.35 + Math.random() * 0.5),
+            (len - trav) * 0.65, size * 0.82, depth + 1);
+          x.globalAlpha = 0.08 + 0.12 * (size / fs0);
+        }
+      }
+      x.setTransform(dpr, 0, 0, dpr, dpr * m, dpr * m);
+      x.globalAlpha = 1;
+      x.strokeStyle = `rgba(40,34,26,${0.04 * (size / fs0)})`;
+      x.lineWidth = size * 0.16;
+      x.beginPath();
+      path.forEach(([qx, qy], i) => (i ? x.lineTo(qx, qy) : x.moveTo(qx, qy)));
+      x.stroke();
+    }
+    const trunks = phone ? 4 : 6;
+    for (let i = 0; i < trunks; i++) {
+      for (const side of [-1, 1]) {
+        const sx = cx + side * a * (0.86 + Math.random() * 0.14);
+        const sy = cy + (Math.random() - 0.5) * b * 1.1;
+        const ang = Math.atan2(cy - sy, cx - sx) + (Math.random() - 0.5) * 0.7;
+        vessel(sx, sy, ang, a * (0.18 + Math.random() * 0.2), fs0 * (0.8 + Math.random() * 0.3), 0);
+      }
+    }
+    for (let i = 0; i < 2; i++) {
+      const sx = cx + (Math.random() - 0.5) * a * 1.2;
+      const sy = cy + (i % 2 ? 1 : -1) * b * 1.05;
+      vessel(sx, sy, Math.atan2(cy - sy, cx - sx) + (Math.random() - 0.5) * 0.6, b * 0.6, fs0 * 0.75, 1);
+    }
+    sclera = c;
+  }
+
+  function buildIrisData() {
+    irisFs = Math.max(4, R * 0.045);
+    const [, m] = offscreen(1, 1);
+    m.font = `italic 500 ${irisFs}px ${SERIF}`;
+    const N = Math.max(phone ? 48 : 64, Math.round((TAU * R * 0.9) / (irisFs * 1.05) / SECTORS) * SECTORS);
+    const per = N / SECTORS;
+    const baseLen = R * 0.95 - pBase * 0.6;
+    spokes = [];
+    for (let s = 0; s < SECTORS; s++) {
+      const stream = QUOTES[role.sectors[s]].t + " · ";
+      let pos = 0;
+      for (let j = 0; j < per; j++) {
+        const i = s * per + j;
+        const long = j % 2 === 0 || Math.random() < 0.25;
+        const target = baseLen * (long ? 1 : 0.62);
+        let text = "", tw = 0;
+        while (tw < target) {
+          const ch = stream[pos++ % stream.length];
+          text += ch;
+          tw += m.measureText(ch).width;
+        }
+        spokes.push({
+          phi: -Math.PI / 2 + ((i + 0.5) / N) * TAU,
+          long, text, tw, sector: s,
+          amp: 0.012 + Math.random() * 0.03,
+          freq: (0.04 + Math.random() * 0.06) * (60 / R),
+          seed: Math.random() * TAU,
+          jit: Math.random(),
+        });
+      }
+    }
+    crypts = Array.from({ length: 10 + Math.floor(Math.random() * 6) }, () => ({
+      phi: Math.random() * TAU, fr: 0.08 + Math.random() * 0.75, size: 0.5 + Math.random() * 0.8,
+    }));
+    freckles = Array.from({ length: Math.floor(Math.random() * 4) }, () => ({
+      phi: Math.random() * TAU, fr: 0.2 + Math.random() * 0.6, size: 0.6 + Math.random() * 0.8,
+    }));
+    furrows = [];
+    for (const rr of [0.8, 0.86, 0.91]) {
+      let th = Math.random() * TAU;
+      const end = th + TAU;
+      while (th < end) {
+        const len = 0.25 + Math.random() * 0.7;
+        furrows.push({ r: rr, start: th, len: Math.min(len, end - th) });
+        th += len + 0.1 + Math.random() * 0.35;
+      }
+    }
+    irisSize = Math.ceil(R * 2 + 6);
+    stroma = offscreen(irisSize, irisSize)[0];
+    stromaLit = offscreen(irisSize, irisSize)[0];
+    buildFibres();
+  }
+
+  // Each fibre's text set upright once, as four strips: inner and outer zone colour, plain and lit.
+  // A bake then lays the strips out radially with a few drawImage calls per fibre, which keeps
+  // re-baking cheap enough to follow the pupil (rotated fillText made a bake take seconds).
+  function buildFibres() {
+    const OS = dpr * 1.5, rh = Math.ceil(irisFs * 1.5);
+    const w = Math.ceil(Math.max(...spokes.map(s => s.tw)) + 4);
+    // rows wrap into columns so the atlas stays inside GPU texture limits
+    const rows = spokes.length * 4, perCol = Math.min(rows, Math.floor(8000 / (rh * OS)));
+    const cols = Math.ceil(rows / perCol);
+    const c = document.createElement("canvas");
+    c.width = Math.ceil(w * cols * OS);
+    c.height = Math.ceil(perCol * rh * OS);
+    const x = c.getContext("2d");
+    x.scale(OS, OS);
+    x.font = `italic 500 ${irisFs}px ${SERIF}`;
+    x.textBaseline = "middle";
+    const hiTint = "#fff4dc";
+    spokes.forEach((sp, i) => {
+      const cIn = mix(palette.inner, palette.bg, sp.jit * 0.35);
+      const cOut = mix(palette.outer, sp.jit > 0.5 ? palette.inner : palette.bg, (sp.jit % 0.5) * 0.5);
+      [cIn, cOut, mix(cIn, hiTint, 0.6), mix(cOut, hiTint, 0.6)].forEach((col, k) => {
+        const row = i * 4 + k;
+        x.fillStyle = col;
+        x.fillText(sp.text, Math.floor(row / perCol) * w, (row % perCol + 0.5) * rh);
+      });
+    });
+    fibres = { c, OS, rh, w, perCol };
+    ring = atlas(`600 ${irisFs * 0.8}px ${SERIF}`, mix(palette.inner, "#fff8e8", 0.3), QUOTES[role.collarette].t + " ✦ ");
+  }
+
+  function textRing(x, h, text, r, at, wobble, seed) {
+    const chars = [...text];
+    let th = seed || 0, k = 0;
+    const end = th + TAU;
+    while (th < end) {
+      const ch = chars[k++ % chars.length];
+      const g = at.glyph[ch];
+      const rr = r * (1 + (wobble || 0) * Math.sin(9 * th + (seed || 0)));
+      const mid = th + g.w / 2 / rr;
+      const ang = mid + Math.PI / 2;
+      x.setTransform(dpr * Math.cos(ang), dpr * Math.sin(ang), -dpr * Math.sin(ang), dpr * Math.cos(ang),
+        dpr * (h + Math.cos(mid) * rr), dpr * (h + Math.sin(mid) * rr));
+      glyph(x, at, ch, -g.w / 2, at.mid);
+      th += g.w / rr;
+    }
+    x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  // The stroma is baked for a pupil size p and re-baked when the pupil settles somewhere new,
+  // so its fibres still stretch and bunch. Fibres run in under the pupil, so a quick
+  // constriction reveals fibres rather than a gap. The lit copy is the same stroma, brightened.
+  function renderStroma(c, p, lit) {
+    const x = c.getContext("2d");
+    const h = irisSize / 2;
+    x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    x.clearRect(0, 0, irisSize, irisSize);
+
+    const r0 = p * 1.04, r1 = R * 0.95;
+    const rc = r0 + (r1 - r0) * 0.34;
+
+    let g = x.createRadialGradient(h, h, p, h, h, R);
+    g.addColorStop(0, mix(palette.bg, palette.inner, 0.5));
+    g.addColorStop((rc / R), mix(palette.bg, palette.outer, 0.4));
+    g.addColorStop(0.86, mix(palette.bg, palette.outer, 0.18));
+    g.addColorStop(1, palette.limbal);
+    x.fillStyle = g;
+    x.beginPath();
+    x.arc(h, h, R, 0, TAU);
+    x.fill();
+
+    // stroma fibres: each fibre in three pieces, so it tapers and wobbles, split where it crosses the collarette
+    const { c: fc, OS, rh, w: fw, perCol } = fibres;
+    spokes.forEach((sp, i) => {
+      const rs = sp.long ? p * 0.57 : rc * 0.97;
+      const span = r1 - rs;
+      if (span < 2) return;
+      const sx = Math.max(0.35, Math.min(2.4, span / sp.tw));
+      const len = Math.min(sp.tw, span / sx);
+      const cut = Math.max(0, Math.min(1, (rc - rs) / span));
+      const stops = [...new Set([0, 1 / 3, 2 / 3, 1, cut])].sort((u, v) => u - v);
+      for (let k = 0; k < stops.length - 1; k++) {
+        const f0 = stops[k], f1 = stops[k + 1];
+        if (f1 - f0 < 0.005) continue;
+        const ra = rs + f0 * span, rm = rs + (f0 + f1) / 2 * span;
+        const phi = sp.phi + sp.amp * Math.sin(rm * sp.freq + sp.seed);
+        const co = Math.cos(phi), si = Math.sin(phi);
+        const sy = 0.22 + 0.85 * (rm / r1);
+        const row = i * 4 + (rm < rc ? 0 : 1) + (lit ? 2 : 0);
+        x.setTransform(dpr * sx * co, dpr * sx * si, -dpr * sy * si, dpr * sy * co, dpr * (h + ra * co), dpr * (h + ra * si));
+        x.drawImage(fc, (Math.floor(row / perCol) * fw + f0 * len) * OS, (row % perCol) * rh * OS,
+          (f1 - f0) * len * OS, rh * OS, 0, -rh / 2, (f1 - f0) * len, rh);
+      }
+    });
+    x.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // crypts: openings in the stroma
+    x.fillStyle = rgba(palette.limbal, 0.55);
+    for (const cr of crypts) {
+      const r = rc + (r1 - rc) * cr.fr;
+      x.beginPath();
+      x.ellipse(h + Math.cos(cr.phi) * r, h + Math.sin(cr.phi) * r, R * 0.05 * cr.size, R * 0.02 * cr.size, cr.phi, 0, TAU);
+      x.fill();
+    }
+    // iris freckles
+    x.fillStyle = "rgba(58,32,14,0.75)";
+    for (const f of freckles) {
+      const r = rc + (r1 - rc) * f.fr;
+      x.beginPath();
+      x.arc(h + Math.cos(f.phi) * r, h + Math.sin(f.phi) * r, R * 0.018 * f.size, 0, TAU);
+      x.fill();
+    }
+    // contraction furrows near the periphery
+    x.strokeStyle = rgba(palette.limbal, 0.5);
+    x.lineWidth = Math.max(0.6, R * 0.006);
+    for (const fu of furrows) {
+      x.beginPath();
+      x.arc(h, h, R * fu.r, fu.start, fu.start + fu.len);
+      x.stroke();
+    }
+
+    // collarette: the wavy ridge between pupillary and ciliary zones
+    textRing(x, h, QUOTES[role.collarette].t + " ✦ ", rc, ring, 0.045, 1.3);
+
+    // limbal ring
+    g = x.createRadialGradient(h, h, R * 0.8, h, h, R);
+    g.addColorStop(0, rgba(palette.limbal, 0));
+    g.addColorStop(0.7, rgba(palette.limbal, 0.55));
+    g.addColorStop(1, rgba(palette.limbal, 0.95));
+    x.fillStyle = g;
+    x.beginPath();
+    x.arc(h, h, R, 0, TAU);
+    x.fill();
+  }
+
+  function bakeIris(p) {
+    stromaP = p;
+    renderStroma(stroma, p, false);
+    renderStroma(stromaLit, p, true);
+    bakes++;
+  }
+
+  function buildPupilText() {
+    const r = pBase * 0.62;
+    const fs = Math.max(5, pBase * 0.2);
+    const size = Math.ceil((r + fs) * 2);
+    const [c, x] = offscreen(size, size);
+    x.translate(size / 2, size / 2);
+    x.font = `italic 500 ${fs}px ${SERIF}`;
+    x.fillStyle = "rgba(255,240,220,0.12)";
+    x.textAlign = "center";
+    const chars = [..."okay? okay. okay? okay. "];
+    const ws = chars.map(ch => x.measureText(ch).width);
+    const scale = (TAU * r) / ws.reduce((s, w) => s + w, 0);
+    let ang = 0;
+    chars.forEach((ch, k) => {
+      const w = ws[k] * scale;
+      x.save();
+      x.rotate(ang + w / 2 / r);
+      x.translate(0, -r);
+      x.fillText(ch, 0, 0);
+      x.restore();
+      ang += w / r;
+    });
+    pupilText = { c, size };
+  }
+
+  // The pupil, its soft edge and the dark pigment ruff, baked once and scaled with the pupil each frame.
+  function buildPupilLayer() {
+    const p = pBase * BAKE;
+    const size = Math.ceil(p * 2.3);
+    const h = size / 2;
+    const [c, x] = offscreen(size, size);
+    const g = x.createRadialGradient(h, h, p * 0.92, h, h, p * 1.12);
+    g.addColorStop(0, "rgba(6,5,4,1)");
+    g.addColorStop(1, "rgba(6,5,4,0)");
+    x.fillStyle = g;
+    x.beginPath();
+    x.arc(h, h, p * 1.12, 0, TAU);
+    x.fill();
+    const text = QUOTES[role.ruff].t + " ";
+    textRing(x, h, text, p * 1.02, atlas(`italic 600 ${Math.max(3.5, irisFs * 0.6) * BAKE}px ${SERIF}`, "#462410", text), 0, 0);
+    const ps = pupilText.size * BAKE;
+    x.drawImage(pupilText.c, h - ps / 2, h - ps / 2, ps, ps);
+    pupilLayer = { c, size };
+  }
+
+  function buildLashes() {
+    lashFs = Math.max(7, E * 0.0125);
+    const [, m] = offscreen(1, 1);
+    m.font = `italic 500 ${lashFs}px ${SERIF}`;
+    const words = LASH_WORDS.map(w => ({ w, width: m.measureText(w).width }));
+    const pick = len => {
+      const pool = shuffled(words).slice(0, 8);
+      return pool.reduce((best, c) => Math.abs(c.width - len) < Math.abs(best.width - len) ? c : best);
+    };
+    lashes = [];
+    const nUp = phone ? 30 : 52;
+    for (let i = 0; i < nUp; i++) {
+      const u = i / (nUp - 1);
+      const t = 0.12 + 0.86 * Math.pow(u, 0.8);
+      const len = lashFs * (1.1 + 4.6 * Math.exp(-((t - 0.72) ** 2) / 0.06)) * (phone ? 0.7 : 1);
+      const wd = pick(len * (0.8 + Math.random() * 0.4));
+      const back = i % 3 === 1;
+      const fade = 0.45 + 0.55 * Math.min(1, (t - 0.12) / 0.35);
+      lashes.push({ lower: false, t: t + (back ? 0.006 : 0), word: wd.w, back,
+        alpha: fade * (back ? TIER.structure + Math.random() * 0.15 : TIER.stroke - 0.1 + Math.random() * 0.15) });
+    }
+    const nLo = phone ? 8 : 14;
+    for (let i = 0; i < nLo; i++) {
+      const u = i / (nLo - 1);
+      const t = 0.4 + 0.54 * u;
+      const wd = pick(lashFs * (0.8 + 1.4 * u) * (0.8 + Math.random() * 0.4));
+      lashes.push({ lower: true, t, word: wd.w, alpha: 0.18 + Math.random() * 0.2 });
+    }
+  }
+
+  // ---------- engraved skin ----------
+  // The lids and folds are engraved: dozens of lines of quotes following the contours of a
+  // lens-shaped orbit, brighter where the skin rolls toward the light. Each line is set upright
+  // once in a strip and bent onto its curve in short segments, so the whole engraving bakes in
+  // a few milliseconds instead of rotating thousands of glyphs.
+  function skinCurves() {
+    const L0 = { x: cx - a * 1.2, y: cy + b * 0.08 }, R0 = { x: cx + a * 1.24, y: cy + b * 0.02 };
+    return {
+      top: [L0, { x: cx - a * 0.55, y: cy - b * 2.75 }, { x: cx + a * 0.55, y: cy - b * 2.8 }, R0],
+      crease: [{ x: Pi.x - a * 0.04, y: Pi.y - b * 0.2 }, { x: cx - a * 0.55, y: cy - b * 1.75 },
+        { x: cx + a * 0.45, y: cy - b * 1.7 }, { x: Po.x + a * 0.08, y: Po.y - b * 0.18 }],
+      bottom: [L0, { x: cx - a * 0.5, y: cy + b * 2.75 }, { x: cx + a * 0.5, y: cy + b * 2.7 }, R0],
+    };
+  }
+  function arc(P, n = 48) {
+    const pts = [cub(P, 0)], acc = [0];
+    for (let i = 1; i <= n; i++) {
+      const p = cub(P, i / n);
+      acc.push(acc[i - 1] + Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y));
+      pts.push(p);
+    }
+    return { pts, acc, L: acc[n] };
+  }
+  // rows of text set upright, one per line of the engraving
+  function strips(texts, font, w) {
+    const OS = dpr * 1.5, rh = Math.ceil(hatchFs * 1.6);
+    const c = document.createElement("canvas");
+    c.width = Math.ceil(w * OS);
+    c.height = Math.ceil(texts.length * rh * OS);
+    const x = c.getContext("2d");
+    x.scale(OS, OS);
+    x.font = font;
+    x.fillStyle = ink;
+    x.textBaseline = "middle";
+    texts.forEach((t, i) => x.fillText(t, 0, (i + 0.5) * rh));
+    return { c, OS, rh, w };
+  }
+  // bend one strip row onto a curve, one short straight segment at a time
+  function stripOnCurve(x, st, row, P, alpha) {
+    const { pts, acc, L } = arc(P);
+    const len = Math.min(L, st.w);
+    x.globalAlpha = alpha;
+    for (let i = 0; i < pts.length - 1 && acc[i] < len; i++) {
+      const p = pts[i], n = pts[i + 1];
+      const seg = Math.min(acc[i + 1], len) - acc[i];
+      const ang = Math.atan2(n.y - p.y, n.x - p.x), co = Math.cos(ang), si = Math.sin(ang);
+      x.setTransform(dpr * co, dpr * si, -dpr * si, dpr * co, dpr * p.x, dpr * p.y);
+      x.drawImage(st.c, acc[i] * st.OS, row * st.rh * st.OS, seg * st.OS + 1, st.rh * st.OS, 0, -st.rh / 2, seg + 1 / st.OS, st.rh);
+    }
+    x.globalAlpha = 1;
+    x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return pts;
+  }
+  function buildSkin() {
+    hatchFs = Math.max(4, E * 0.0088);
+    const { U: U0, L: L0 } = lids(1, 0);
+    const { top, crease, bottom } = skinCurves();
+    const gap = hatchFs * 1.15;
+    const midY = P => cub(P, 0.5).y;
+    // bands between contours, each with its own tone: brightest where the skin rolls toward the light
+    const bands = [
+      { from: top, to: crease, tone: t => 0.12 + 0.85 * Math.pow(Math.sin(Math.PI * t), 1.5), regions: [["orbital", 0.5]] },
+      { from: crease, to: U0, tone: t => 0.15 + 0.85 * Math.pow(Math.sin(Math.PI * t), 1.2), regions: [["fold", 0.5]] },
+      { from: U0, to: L0, tone: t => 0.3 + 0.25 * Math.sin(Math.PI * t), sparse: 2, regions: [] },   // the closed lid, seen only in a blink
+      { from: L0, to: bottom, tone: t => 0.1 + 0.88 * Math.exp(-((t - 0.22) ** 2) / 0.05), regions: [["lowerFold", 0.25], ["trough", 0.8]] },
+    ];
+    const lines = [];
+    regionLine = { crease: { P: crease, tone: 0.75 } };
+    for (const bd of bands) {
+      const n = Math.max(3, Math.round(Math.abs(midY(bd.to) - midY(bd.from)) / (gap * (bd.sparse || 1))));
+      const own = [];
+      for (let i = 1; i < n; i++) own.push({ P: lerpCurve(bd.from, bd.to, i / n), t: i / n, tone: bd.tone(i / n) });
+      // each readable line takes the place of the hatch line nearest its position
+      for (const [key, t] of bd.regions) {
+        const best = own.reduce((m, l) => Math.abs(l.t - t) < Math.abs(m.t - t) ? l : m);
+        best.region = key;
+        regionLine[key] = best;
+      }
+      lines.push(...own.filter(l => !l.region));
+    }
+    lines.push({ P: top, tone: 0.2 }, { P: bottom, tone: 0.15 });
+    const w = Math.ceil(a * 2.7);
+    const chars = Math.ceil(w / (hatchFs * 0.28));
+    const stream = shuffled(QUOTES).map(q => q.t).join("  ·  ");
+    const long = (stream + "  ·  ").repeat(Math.ceil(chars / stream.length) + 2);
+    const st = strips(lines.map((_, i) => long.substr((i * 97) % stream.length, chars)), `italic 400 ${hatchFs}px ${SERIF}`, w);
+    const [c, x] = offscreen(W, H);
+    lines.forEach((l, i) => stripOnCurve(x, st, i, l.P, Math.min(1, l.tone)));
+    skin = c;
+    buildRegionStrips();
+  }
+  // the readable lines: each region's quote repeated along its line, plain and lit
+  function buildRegionStrips() {
+    const w = Math.ceil(a * 2.7);
+    const texts = CURVES.map(c => {
+      const t = QUOTES[role[c.key]].t + "  ·  ";
+      return t.repeat(Math.ceil(w / (hatchFs * 0.28) / t.length) + 1);
+    });
+    regionStrips = { plain: strips(texts, `italic 400 ${hatchFs}px ${SERIF}`, w), lit: strips(texts, `italic 600 ${hatchFs}px ${SERIF}`, w) };
+  }
+
+  // Geometry only: sizes the stage straight away, before fonts load, so nothing shifts later.
+  function measure() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = stage.clientWidth;
+    phone = W < 500;
+    // E is the eye's own scale. Phones give it the full column; larger screens cap it by
+    // viewport height so the caption stays in the first screen, and the stage hugs the eye.
+    E = phone ? W : Math.min(W, Math.max(420, window.innerHeight * 0.56) / 0.66);
+    if (!phone) W = Math.min(W, Math.round(E * 1.3));
+    a = E * 0.36;
+    b = E * 0.14;
+    R = b * 1.05;
+    pBase = R * 0.38;
+    cx = W / 2;
+    cy = Math.round(b * 2.35);
+    H = Math.round(cy + b * 2.35);
+    eyeEl.style.width = W + "px";
+    eyeEl.style.height = H + "px";
+    Pi = { x: cx - a, y: cy + b * 0.06 };
+    Po = { x: cx + a, y: cy - b * 0.12 };
+    sizeCanvas(backC, W, H);
+    sizeCanvas(frontC, W, H);
+    // the eye opening only ever covers this box, so its canvas (redrawn most often) is no larger
+    ex = Math.floor(Pi.x - 6);
+    ey = Math.floor(cy - b * 1.5);
+    ew = Math.ceil(2 * a + 12);
+    eh = Math.ceil(b * 2.95);
+    sizeCanvas(midC, ew, eh);
+    midC.style.left = ex + "px";
+    midC.style.top = ey + "px";
+    midC.style.visibility = "visible";
+  }
+
+  function layout() {
+    measure();
+    readTheme();
+    buildSclera();
+    buildPupilText();
+    buildIrisData();
+    bakeIris(pBase);
+    buildPupilLayer();
+    buildLashes();
+    buildInkAtlases();
+    buildSkin();
+    reserveCaption();
+    keys = {};
+    built = true;
+  }
+
+  // ---------- state ----------
+  let pointer = null;      // { x, y, t, type } in stage coords
+  let pressed = false;
+  let downAt = null;
+  let gaze = { x: 0, y: 0 }, target = { x: 0, y: 0 }, micro = { x: 0, y: 0 };
+  let nextWander = 0, nextMicro = 0;
+  let pupil = 0, pupilStill = 0;
+  let blink = null, nextBlink = performance.now() + 2500;
+  let hovered = null;      // region under a mouse pointer
+  let selected = null;     // region chosen by keyboard or tap; held until another choice
+  let selectedAt = 0;
+  let featured = 0, nextFeature = performance.now() + DWELL;
+  let lit = null, litFade = 1;
+  let scene = null;        // geometry of the last drawn skin, for hit-testing
+  let keys = {};           // what each layer was last drawn with
+  let shown = "";
+  let last = performance.now();
+  let visible = true, running = false;
+
+  const dwell = id => DWELL + 55 * QUOTES[regionQuote(id)].t.length;
+
+  function startBlink(onClose) {
+    if (blink) return;
+    blink = reduceMotion
+      ? { start: performance.now(), close: 1, hold: onClose ? 120 : 1, open: 1, onClose, fired: false }
+      : { start: performance.now(), close: 85, hold: onClose ? 170 : 25, open: 210, onClose, fired: false };
+  }
+  function openness(now) {
+    if (!blink) return 1;
+    const e = now - blink.start;
+    const { close, hold, open } = blink;
+    if (e < close) return 1 - e / close;
+    if (e < close + hold) {
+      if (!blink.fired) { blink.fired = true; blink.onClose && blink.onClose(); }
+      return 0;
+    }
+    if (!blink.fired) { blink.fired = true; blink.onClose && blink.onClose(); }
+    if (e < close + hold + open) {
+      const q = (e - close - hold) / open;
+      return 1 - Math.pow(1 - q, 2.2);
+    }
+    blink = null;
+    nextBlink = now + 2200 + Math.random() * 4500;
+    return 1;
+  }
+
+  function reshuffle() {
+    order = shuffled(QUOTES.map((_, i) => i));
+    role = roles();
+    buildIrisData();
+    bakeIris(pupil);
+    buildPupilLayer();
+    buildLashes();
+    buildRegionStrips();
+    keys = {};
+    featured = 0;
+    nextFeature = performance.now() + DWELL;
+    if (selected) announce(selected);
+  }
+
+  // ---------- caption ----------
+  function fillCaption(el, part, q) {
+    el.querySelector(".caption__part").textContent = part;
+    el.querySelector("blockquote").textContent = "“" + q.t + "”";
+    const cite = document.createElement("cite");
+    cite.textContent = q.b;
+    el.querySelector("figcaption").replaceChildren(cite, " — " + q.a);
+  }
+  // A swap fades the caption out, then fills it with whatever is wanted by then,
+  // so a region that changes mid-fade never restarts or starves the swap.
+  function show(id, state) {
+    const idx = regionQuote(id);
+    show.want = { id, idx, state };
+    if (show.timer) return;
+    if (shown === id + "|" + idx) {
+      if (caption.dataset.state !== state) caption.dataset.state = state;
+      return;
+    }
+    caption.dataset.state = "leaving";
+    show.timer = setTimeout(() => {
+      show.timer = null;
+      const w = show.want;
+      shown = w.id + "|" + w.idx;
+      fillCaption(caption, regionName(w.id), QUOTES[w.idx]);
+      caption.dataset.state = w.state;
+    }, reduceMotion ? 0 : 180);
+  }
+  // Reserve room for the longest quote so the controls below never move. It only ever grows,
+  // so re-measuring once the web fonts arrive cannot shift the page.
+  function reserveCaption() {
+    const probe = caption.cloneNode(true);
+    probe.querySelectorAll("[id]").forEach(el => el.removeAttribute("id"));
+    probe.removeAttribute("id");
+    probe.style.cssText = `position:absolute;visibility:hidden;min-height:0;width:${caption.clientWidth}px`;
+    caption.after(probe);
+    let max = parseFloat(getComputedStyle(caption).minHeight) || 0;
+    for (const q of QUOTES) {
+      fillCaption(probe, "Iris · sector 8 of 8", q);
+      max = Math.max(max, probe.offsetHeight);
+    }
+    probe.remove();
+    caption.style.minHeight = max + "px";
+  }
+  function announce(id) {
+    if (!id) { announceEl.textContent = ""; return; }
+    const q = QUOTES[regionQuote(id)];
+    announceEl.textContent = `${regionName(id)}. “${q.t}” ${q.b}, by ${q.a}.`;
+  }
+  function select(id) {
+    selected = id;
+    selectedAt = performance.now();
+    announce(id);
+  }
+
+  function nearCurve(pts, p, tol) {
+    for (let i = 0; i < pts.length; i++) {
+      if (Math.hypot(pts[i].x - p.x, pts[i].y - p.y) < tol) return true;
+    }
+    return false;
+  }
+
+  // which readable region is under a point, using the geometry of the last frame
+  function hitTest(p) {
+    const sc = scene;
+    if (!sc) return { id: null, overEye: false };
+    fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const overEye = fctx.isPointInPath(sc.eye, p.x * dpr, p.y * dpr);
+    if (overEye) {
+      // undo the foreshortening to find where on the iris disc the point is
+      let dx = p.x - sc.ix, dy = p.y - sc.iy;
+      const co = Math.cos(sc.th), si = Math.sin(sc.th);
+      const lx = (dx * co + dy * si) / sc.fsh, ly = -dx * si + dy * co;
+      dx = lx * co - ly * si;
+      dy = lx * si + ly * co;
+      const dd = Math.hypot(dx, dy);
+      if (dd > sc.pDraw && dd < R) {
+        const al = (Math.atan2(dy, dx) + Math.PI / 2 + TAU) % TAU;
+        return { id: "s" + (Math.floor(al / (TAU / SECTORS)) % SECTORS), overEye };
+      }
+    }
+    for (const cv of sc.curves) if (nearCurve(cv.pts, p, Math.max(8, b * 0.07))) return { id: cv.key, overEye };
+    return { id: null, overEye };
+  }
+
+  // where the eye looks when a region is chosen without a pointer
+  function lookAt(id) {
+    const sc = scene;
+    if (!sc) return;
+    let p;
+    if (isSector(id)) {
+      const ang = -Math.PI / 2 + (+id[1] + 0.5) * TAU / SECTORS;
+      p = { x: cx + Math.cos(ang) * a * 0.5, y: cy + Math.sin(ang) * b * 1.4 };
+    } else {
+      const cv = sc.curves.find(c => c.key === id);
+      if (!cv) return;
+      p = cv.pts[24];
+    }
+    target.x = Math.tanh((p.x - cx) / (a * 1.1));
+    target.y = Math.tanh((p.y - cy) / (b * 2.6));
+  }
+
+  // ---------- layers ----------
+  // back: the baked engraving, with the five readable lines over it; the lit one turns bold and bright
+  function drawBack(x, glow) {
+    x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    x.clearRect(0, 0, W, H);
+    x.drawImage(skin, 0, 0, W, H);
+    const curves = [];
+    CURVES.forEach((c, i) => {
+      const line = regionLine[c.key], on = lit === c.key;
+      const alpha = Math.min(1, line.tone);
+      curves.push({ key: c.key, pts: stripOnCurve(x, regionStrips.plain, i, line.P, on ? alpha * (1 - glow) : alpha) });
+      if (on) stripOnCurve(x, regionStrips.lit, i, line.P, alpha + (1 - alpha) * glow);
+    });
+    return { curves };
+  }
+
+  // the eye opening: sclera, iris, reflections and shadows, clipped to the lids
+  function drawEye(x, eye, U, L, s) {
+    const { ix, iy, th, fsh, pDraw, glow } = s;
+    x.setTransform(dpr, 0, 0, dpr, -ex * dpr, -ey * dpr);
+    x.clearRect(ex, ey, ew, eh);
+    x.save();
+    x.clip(eye);
+    // the conjunctiva rides on the globe, so the vessels drift with the gaze
+    x.drawImage(sclera, -scleraM + gaze.x * a * 0.1, -scleraM + gaze.y * b * 0.06, W + 2 * scleraM, H + 2 * scleraM);
+
+    // caruncle and plica at the inner corner
+    const Cp = { x: Pi.x + a * 0.075, y: Pi.y + b * 0.02 };
+    let g = x.createRadialGradient(Cp.x, Cp.y, 0, Cp.x, Cp.y, b * 0.34);
+    g.addColorStop(0, "rgba(150,138,118,0.75)");
+    g.addColorStop(0.6, "rgba(130,118,98,0.4)");
+    g.addColorStop(1, "rgba(130,118,98,0)");
+    x.fillStyle = g;
+    x.beginPath();
+    x.ellipse(Cp.x, Cp.y, a * 0.07, b * 0.3, 0, 0, TAU);
+    x.fill();
+    x.font = `italic 600 ${Math.max(4, E * 0.006)}px ${SERIF}`;
+    x.fillStyle = "rgba(40,34,26,0.5)";
+    x.textAlign = "center";
+    for (let i = -2; i <= 2; i++) x.fillText("·  ·  ·", Cp.x, Cp.y + i * b * 0.07);
+    x.strokeStyle = "rgba(60,52,40,0.4)";
+    x.lineWidth = Math.max(1, E * 0.002);
+    x.beginPath();
+    x.ellipse(Pi.x + a * 0.17, Cp.y, a * 0.03, b * 0.42, 0, -1.25, 1.25);
+    x.stroke();
+
+    // globe shading
+    x.save();
+    x.translate(cx, cy);
+    x.scale(1, b / a);
+    g = x.createRadialGradient(0, 0, a * 0.3, 0, 0, a);
+    g.addColorStop(0, "rgba(20,16,12,0)");
+    g.addColorStop(1, "rgba(20,16,12,0.35)");
+    x.fillStyle = g;
+    // taller than the globe, because the open upper lid rises a little above cy - b
+    x.fillRect(-a, -a * 1.6, a * 2, a * 3.2);
+    x.restore();
+
+    // iris: the baked stroma, the lit sector over it, then the pupil scaled to its current size
+    x.save();
+    x.translate(ix, iy);
+    x.rotate(th);
+    x.scale(fsh, 1);
+    x.rotate(-th);
+    x.drawImage(stroma, -irisSize / 2, -irisSize / 2, irisSize, irisSize);
+    if (isSector(lit)) {
+      const a0 = -Math.PI / 2 + (+lit[1]) * TAU / SECTORS;
+      x.save();
+      x.beginPath();
+      x.moveTo(0, 0);
+      x.arc(0, 0, R, a0, a0 + TAU / SECTORS);
+      x.closePath();
+      x.clip();
+      x.globalAlpha = glow;
+      x.drawImage(stromaLit, -irisSize / 2, -irisSize / 2, irisSize, irisSize);
+      x.restore();
+    }
+    const ps = pupilLayer.size * (pDraw / (pBase * BAKE));
+    x.drawImage(pupilLayer.c, -ps / 2, -ps / 2, ps, ps);
+    x.restore();
+
+    // corneal reflection, which drifts less than the pupil does
+    const kx = cx + gaze.x * a * 0.36 - R * 0.3, ky = cy + gaze.y * b * 0.26 - R * 0.36;
+    g = x.createRadialGradient(kx, ky, 0, kx, ky, R * 0.3);
+    g.addColorStop(0, "rgba(255,255,255,0.35)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    x.fillStyle = g;
+    x.fillRect(kx - R * 0.3, ky - R * 0.3, R * 0.6, R * 0.6);
+    x.fillStyle = "rgba(255,255,255,0.9)";
+    x.beginPath();
+    x.ellipse(kx, ky, R * 0.075, R * 0.06, -0.5, 0, TAU);
+    x.fill();
+    x.fillStyle = "rgba(255,255,255,0.3)";
+    x.beginPath();
+    x.arc(cx + gaze.x * a * 0.36 + R * 0.26, cy + gaze.y * b * 0.26 + R * 0.3, R * 0.035, 0, TAU);
+    x.fill();
+
+    // lid shadows; the upper one starts above the lid's peak so no unshaded strip is left under it
+    const upPeak = cub(U, 0.45).y, loPeak = cub(L, 0.55).y;
+    g = x.createLinearGradient(0, upPeak - b * 0.3, 0, upPeak + b * 0.7);
+    g.addColorStop(0, "rgba(14,12,10,0.5)");
+    g.addColorStop(0.3, "rgba(14,12,10,0.4)");
+    g.addColorStop(1, "rgba(30,22,20,0)");
+    x.fillStyle = g;
+    x.fillRect(cx - a, upPeak - b * 0.3, a * 2, b);
+    g = x.createLinearGradient(0, loPeak, 0, loPeak - b * 0.25);
+    g.addColorStop(0, "rgba(45,26,18,0.2)");
+    g.addColorStop(1, "rgba(45,26,18,0)");
+    x.fillStyle = g;
+    x.fillRect(cx - a, loPeak - b * 0.25, a * 2, b * 0.25);
+
+    // waterline and tear meniscus along the lower lid
+    x.lineCap = "round";
+    x.strokeStyle = "rgba(236,228,210,0.55)";
+    x.lineWidth = b * 0.045;
+    x.beginPath();
+    x.moveTo(Pi.x, Pi.y);
+    x.bezierCurveTo(L[1].x, L[1].y, L[2].x, L[2].y, Po.x, Po.y);
+    x.stroke();
+    x.strokeStyle = "rgba(255,255,255,0.4)";
+    x.lineWidth = Math.max(1, E * 0.0012);
+    x.beginPath();
+    for (let i = 0; i <= 40; i++) {
+      const t = 0.12 + 0.78 * (i / 40);
+      const p = cub(L, t);
+      i ? x.lineTo(p.x, p.y - b * 0.055) : x.moveTo(p.x, p.y - b * 0.055);
+    }
+    x.stroke();
+    x.restore();
+    return Cp;
+  }
+
+  // front: lid margins and lashes
+  function drawFront(x, U, L, o) {
+    x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    x.clearRect(0, 0, W, H);
+    x.strokeStyle = "rgba(28,20,16,0.9)";
+    x.lineWidth = Math.max(2, E * 0.004);
+    x.beginPath();
+    x.moveTo(Pi.x, Pi.y);
+    x.bezierCurveTo(U[1].x, U[1].y, U[2].x, U[2].y, Po.x, Po.y);
+    x.stroke();
+    x.strokeStyle = rgba(ink, 0.25);
+    x.lineWidth = 1;
+    x.beginPath();
+    const Um = shiftCurve(U, -b * 0.06);
+    x.moveTo(Um[0].x + a * 0.03, Um[0].y + b * 0.04);
+    x.bezierCurveTo(Um[1].x, Um[1].y, Um[2].x, Um[2].y, Um[3].x - a * 0.02, Um[3].y + b * 0.04);
+    x.stroke();
+    x.strokeStyle = "rgba(28,20,16,0.35)";
+    x.beginPath();
+    x.moveTo(Pi.x, Pi.y);
+    x.bezierCurveTo(L[1].x, L[1].y, L[2].x, L[2].y, Po.x, Po.y);
+    x.stroke();
+
+    // lashes: curled words that flip down as the lid closes
+    for (const l of lashes) {
+      const at = l.lower ? A.lashLow : l.back ? A.lashBack : A.lash;
+      const P = l.lower ? L : U;
+      const pt = cub(P, l.t), d = cubD(P, l.t);
+      const side = (pt.x - cx) / a;
+      let ang = Math.atan2(d.y, d.x) + (l.lower ? Math.PI / 2 : -Math.PI / 2);
+      ang += l.lower ? -side * 0.6 : side * 0.8;
+      let curl = 0;
+      if (!l.lower) {
+        ang += (side >= 0 ? 1 : -1) * Math.pow(1 - o, 1.3) * 2.3;
+        curl = -(ang + Math.PI / 2) * 0.55 * o;
+      }
+      x.globalAlpha = l.alpha;
+      let px = pt.x + Math.cos(ang) * 1.5, py = pt.y + Math.sin(ang) * 1.5;
+      const total = [...l.word].reduce((s, ch) => s + at.glyph[ch].w, 0);
+      let s = 0;
+      for (const ch of l.word) {
+        const u = s / total;
+        const aa = ang + curl * u * u;
+        const sc = 1 - 0.5 * u;
+        const w = at.glyph[ch].w;
+        const co = Math.cos(aa), si = Math.sin(aa);
+        x.setTransform(dpr * sc * co, dpr * sc * si, -dpr * sc * si, dpr * sc * co, dpr * px, dpr * py);
+        glyph(x, at, ch, 0, at.mid);
+        px += co * w * sc;
+        py += si * w * sc;
+        s += w;
+      }
+    }
+    x.globalAlpha = 1;
+    x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  // ---------- frame ----------
+  function frame(now) {
+    if (!visible) { running = false; return; }
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    const tSec = now / 1000;
+
+    if (!blink && now > nextBlink && !reduceMotion) startBlink();
+    const o = openness(now);
+
+    // gaze: a chosen region, else the pointer if recent, else idle saccades; plus tiny fixational microsaccades
+    const active = pointer && now - pointer.t < 4000;
+    if (selected && (!active || selectedAt > pointer.t)) {
+      lookAt(selected);
+    } else if (active) {
+      target.x = Math.tanh((pointer.x - cx) / (a * 1.1));
+      target.y = Math.tanh((pointer.y - cy) / (b * 2.6));
+    } else if (now > nextWander) {
+      const ang = Math.random() * TAU, mag = reduceMotion ? 0 : Math.random() * 0.75;
+      target.x = Math.cos(ang) * mag;
+      target.y = Math.sin(ang) * mag * 0.8;
+      nextWander = now + 900 + Math.random() * 2400;
+    }
+    if (!reduceMotion && now > nextMicro) {
+      micro.x = (Math.random() - 0.5) * 0.035;
+      micro.y = (Math.random() - 0.5) * 0.035;
+      nextMicro = now + 280 + Math.random() * 500;
+    }
+    const kg = reduceMotion ? 1 : 1 - Math.exp(-dt * 16);
+    gaze.x += (target.x + micro.x - gaze.x) * kg;
+    gaze.y += (target.y + micro.y - gaze.y) * kg;
+    const ix = cx + gaze.x * a * 0.45;
+    const iy = cy + gaze.y * b * 0.32;
+
+    // pupil: light reflex when the cursor comes close, dilation when held; constricts fast, dilates slow
+    const near = active ? Math.max(0, 1 - Math.hypot(pointer.x - ix, pointer.y - iy) / (a * 1.2)) : 0;
+    const pT = Math.min(R * 0.62, pBase * (1 - 0.42 * near) * (pressed ? 1.6 : 1));
+    pupil += (pT - pupil) * (reduceMotion ? 1 : 1 - Math.exp(-dt * (pT < pupil ? 6 : 2.2)));
+    // once the pupil has rested somewhere new for a moment, re-bake the stroma so its fibres follow
+    if (Math.abs(pT - pupil) > 0.25) pupilStill = now;
+    else if (now - pupilStill > 250 && Math.abs(pupil - stromaP) > pBase * 0.1) bakeIris(pupil);
+    const hippus = reduceMotion ? 1 : 1 + 0.025 * Math.sin(tSec * 1.1) + 0.015 * Math.sin(tSec * 2.7 + 1);
+    const pDraw = pupil * hippus;
+
+    // the lit region: hover, then a chosen region, then the featured sector
+    if (hovered || selected) nextFeature = Math.max(nextFeature, now + DWELL);
+    else if (!reduceMotion && now > nextFeature) {
+      featured = (featured + 1) % SECTORS;
+      nextFeature = now + dwell("s" + featured);
+    }
+    const nowLit = hovered || selected || "s" + featured;
+    if (nowLit !== lit) {
+      litFade = !hovered && !selected && !reduceMotion && lit ? 0 : 1;
+      lit = nowLit;
+    }
+    litFade = Math.min(1, litFade + dt / 0.36);
+    const glow = q(easeOut(litFade), 0.05);
+    show(lit, !hovered && selected ? "selected" : "featured");
+
+    // The lids are quantized to sub-pixel steps, so the skin layers redraw only when they really move.
+    const oL = q(o, 0.01), gyL = q(gaze.y, 0.01);
+    const { U, L } = lids(oL, gyL);
+
+    // foreshortening: the iris is a disc on a sphere, so it narrows as the eye turns
+    const gm = Math.min(1, Math.hypot(gaze.x, gaze.y * 0.8));
+    const th = Math.atan2(gaze.y, gaze.x);
+    const fsh = 1 - 0.24 * gm;
+
+    const lidKey = oL + "|" + gyL;
+    const backKey = lit + "|" + glow + "|" + ink;
+    let eye = scene && scene.lidKey === lidKey ? scene.eye : null;
+    if (!eye) {
+      eye = new Path2D();
+      eye.moveTo(Pi.x, Pi.y);
+      eye.bezierCurveTo(U[1].x, U[1].y, U[2].x, U[2].y, Po.x, Po.y);
+      eye.bezierCurveTo(L[2].x, L[2].y, L[1].x, L[1].y, Pi.x, Pi.y);
+      eye.closePath();
+    }
+    if (keys.back !== backKey) {
+      keys.back = backKey;
+      scene = { ...(scene || {}), ...drawBack(bctx, glow) };
+    }
+    const midKey = [lidKey, q(ix, 0.25), q(iy, 0.25), q(pDraw, 0.25), q(gaze.x, 0.005), q(gaze.y, 0.005), lit, glow, bakes, palette.name].join("|");
+    if (keys.mid !== midKey) {
+      keys.mid = midKey;
+      scene.Cp = drawEye(ectx, eye, U, L, { ix, iy, th, fsh, pDraw, glow });
+    }
+    const frontKey = lidKey + "|" + ink + (showLabels ? "|" + midKey : "");
+    if (keys.front !== frontKey) {
+      keys.front = frontKey;
+      drawFront(fctx, U, L, oL);
+      if (showLabels) drawLabels({ ix, iy, pDraw, U, L, Cp: scene.Cp, fsh });
+    }
+    Object.assign(scene, { eye, lidKey, ix, iy, th, fsh, pDraw });
+
+    // ---- hover (mouse only: touch reads by tapping) ----
+    hovered = null;
+    if (pointer && pointer.type === "mouse" && pointer.x >= 0 && pointer.x <= W && pointer.y >= 0 && pointer.y <= H) {
+      const hit = hitTest(pointer);
+      hovered = hit.id;
+      const cursor = hit.id ? "help" : hit.overEye ? "pointer" : "crosshair";
+      if (eyeEl.style.cursor !== cursor) eyeEl.style.cursor = cursor;
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- anatomy labels ----------
+  function drawLabels(s) {
+    const x = fctx;
+    const r0 = s.pDraw * 1.04, rc = r0 + (R * 0.95 - r0) * 0.34;
+    const items = [
+      ["Pupil", { x: s.ix, y: s.iy }],
+      ["Collarette", { x: s.ix - rc * 0.7 * s.fsh, y: s.iy + rc * 0.7 }],
+      ["Iris stroma", { x: s.ix + R * 0.62 * s.fsh, y: s.iy + R * 0.3 }],
+      ["Limbus", { x: s.ix + R * 0.96 * s.fsh, y: s.iy - R * 0.1 }],
+      ["Sclera", { x: cx + a * 0.75, y: cy + b * 0.05 }],
+      ["Caruncle", s.Cp],
+      ["Lash line", cub(s.U, 0.8)],
+      ["Waterline", cub(s.L, 0.68)],
+      ["Upper orbital fold", cub(regionLine.orbital.P, 0.22)],
+      ["Upper lid crease", cub(regionLine.crease.P, 0.3)],
+      ["Lower eyelid", cub(regionLine.lowerFold.P, 0.25)],
+      ["Lower orbital fold", cub(regionLine.trough.P, 0.72)],
+    ];
+    x.font = `11px ${MONO}`;
+    x.textBaseline = "middle";
+    const left = [], right = [];
+    for (const it of items) (it[1].x < cx ? left : right).push(it);
+    const place = (list, side) => {
+      list.sort((p, q) => p[1].y - q[1].y);
+      let lastY = -Infinity;
+      const colX = side < 0 ? 8 : W - 8;
+      for (const [name, pt] of list) {
+        const y = Math.max(lastY + 16, Math.min(H - 8, Math.max(8, pt.y)));
+        lastY = y;
+        const tw = x.measureText(name).width;
+        const endX = side < 0 ? colX + tw + 6 : colX - tw - 6;
+        x.strokeStyle = rgba(muted, 0.8);
+        x.lineWidth = 1;
+        x.beginPath();
+        x.moveTo(pt.x, pt.y);
+        x.lineTo(endX, y);
+        x.stroke();
+        x.fillStyle = rgba(muted, 1);
+        x.beginPath();
+        x.arc(pt.x, pt.y, 2.5, 0, TAU);
+        x.fill();
+        x.fillStyle = ink;
+        x.textAlign = side < 0 ? "left" : "right";
+        x.fillText(name, colX, y);
+      }
+    };
+    place(left, -1);
+    place(right, 1);
+  }
+
+  // ---------- input ----------
+  // the stage's position is cached and refreshed on scroll and resize, not read on every pointer move
+  let rect = null;
+  const refreshRect = () => { rect = null; };
+  window.addEventListener("scroll", refreshRect, { passive: true });
+  function track(e) {
+    rect ||= eyeEl.getBoundingClientRect();
+    pointer = { x: e.clientX - rect.left, y: e.clientY - rect.top, t: performance.now(), type: e.pointerType };
+  }
+  window.addEventListener("pointermove", track, { passive: true });
+  eyeEl.addEventListener("pointerdown", e => {
+    track(e);
+    pressed = true;
+    downAt = { x: e.clientX, y: e.clientY, t: performance.now() };
+    eyeEl.setPointerCapture(e.pointerId);
+  });
+  eyeEl.addEventListener("pointerup", e => {
+    pressed = false;
+    const tap = downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) < 8 && performance.now() - downAt.t < 350;
+    downAt = null;
+    if (!tap) return;
+    if (e.pointerType === "mouse") { startBlink(reshuffle); return; }
+    // a tap is a reading gesture: it selects the region under the finger, or releases on empty skin
+    track(e);
+    const { id } = hitTest(pointer);
+    if (id) select(id);
+    else { selected = null; announce(null); }
+  });
+  eyeEl.addEventListener("pointercancel", () => { pressed = false; downAt = null; });
+  eyeEl.addEventListener("contextmenu", e => { if (pressed) e.preventDefault(); });
+  eyeEl.addEventListener("keydown", e => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      startBlink(reshuffle);
+    } else if (/^Arrow/.test(e.key)) {
+      e.preventDefault();
+      const ids = regionIds();
+      const dir = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : -1;
+      const i = ids.indexOf(selected);
+      select(i < 0 ? lit || "s" + featured : ids[(i + dir + ids.length) % ids.length]);
+    } else if (e.key === "Escape" && selected) {
+      selected = null;
+      announce(null);
+    }
+  });
+  document.getElementById("reshuffle").addEventListener("click", () => startBlink(reshuffle));
+
+  // ---------- controls ----------
+  const swatches = document.getElementById("swatches");
+  Object.values(PALETTES).forEach(p => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "swatch";
+    btn.title = p.name;
+    btn.setAttribute("aria-label", p.name + " iris");
+    btn.setAttribute("aria-pressed", p === palette);
+    btn.dataset.palette = p.name.toLowerCase();
+    const disc = document.createElement("span");
+    disc.style.background = `radial-gradient(circle, #060504 0 22%, ${p.inner} 26%, ${p.outer} 60%, ${p.limbal} 100%)`;
+    btn.append(disc);
+    swatches.append(btn);
+  });
+  // one delegated listener for the whole row
+  swatches.addEventListener("click", e => {
+    const btn = e.target.closest(".swatch");
+    if (!btn) return;
+    palette = PALETTES[btn.dataset.palette];
+    swatches.querySelectorAll(".swatch").forEach(s => s.setAttribute("aria-pressed", s === btn));
+    if (built) { buildFibres(); bakeIris(pupil); }
+  });
+  const toggle = document.getElementById("anatomy");
+  toggle.addEventListener("click", () => {
+    showLabels = !showLabels;
+    toggle.setAttribute("aria-pressed", showLabels);
+  });
+
+  // the quote list is built once, in one fragment
+  const items = document.createDocumentFragment();
+  QUOTES.forEach(q => {
+    const li = document.createElement("li");
+    li.textContent = "“" + q.t + "”";
+    const s = document.createElement("span");
+    const cite = document.createElement("cite");
+    cite.textContent = q.b;
+    s.append(cite, " — " + q.a);
+    li.append(s);
+    items.append(li);
+  });
+  document.getElementById("list").append(items);
+
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    readTheme();
+    if (built) { buildInkAtlases(); buildSkin(); keys = {}; }
+  });
+
+  // ---------- start ----------
+  // The stage is sized and the caption filled and reserved before fonts or layers are ready,
+  // so the first paint already has the final layout.
+  measure();
+  fillCaption(caption, regionName("s0"), QUOTES[role.sectors[0]]);
+  shown = "s0|" + role.sectors[0];
+  reserveCaption();
+
+  function start() {
+    if (running || !built || !visible) return;
+    running = true;
+    last = performance.now();
+    requestAnimationFrame(frame);
+  }
+  const fontsReady = Promise.all([
+    document.fonts.load(`italic 400 20px ${SERIF}`),
+    document.fonts.load(`italic 500 20px ${SERIF}`),
+    document.fonts.load(`italic 600 20px ${SERIF}`),
+    document.fonts.load(`600 20px ${SERIF}`),
+    document.fonts.load(`11px ${MONO}`),
+  ]);
+  Promise.race([fontsReady, new Promise(r => setTimeout(r, 1500))]).then(() => {
+    layout();
+    pupil = stromaP = pBase;
+    let pending = false, lastW = stage.clientWidth, lastH = window.innerHeight;
+    new ResizeObserver(() => {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => {
+        pending = false;
+        rect = null;
+        if (stage.clientWidth !== lastW || (!phone && window.innerHeight !== lastH)) {
+          lastW = stage.clientWidth;
+          lastH = window.innerHeight;
+          layout();
+          pupil = stromaP = pBase;
+          scene = null;
+        }
+      });
+    }).observe(document.documentElement);
+    // stop drawing while the eye is scrolled out of view
+    new IntersectionObserver(([en]) => {
+      visible = en.isIntersecting;
+      if (visible) start();
+    }).observe(stage);
+    start();
+  });
+})();
+</script>
+</body>
+</html>
