@@ -326,6 +326,7 @@
     <div class="actions">
       <button class="toggle" id="anatomy" type="button" aria-pressed="false">Anatomy</button>
       <button class="toggle touch-only" id="reshuffle" type="button">Reshuffle</button>
+      <button class="toggle" id="copy" type="button">Copy quote</button>
     </div>
   </div>
 
@@ -1614,6 +1615,30 @@
     }
   });
   document.getElementById("reshuffle").addEventListener("click", () => startBlink(reshuffle));
+
+  // copy the quote in the caption, with its book and author
+  const copyBtn = document.getElementById("copy");
+  copyBtn.addEventListener("click", () => {
+    const idx = Number((shown || "").split("|")[1]);
+    const q = QUOTES[idx];
+    if (!q) return;
+    const text = `“${q.t}” — ${q.b}, by ${q.a}`;
+    const done = (label, message) => {
+      copyBtn.textContent = label;
+      announceEl.textContent = message;
+      clearTimeout(copyBtn.timer);
+      copyBtn.timer = setTimeout(() => { copyBtn.textContent = "Copy quote"; }, 2000);
+    };
+    const selectIt = () => {
+      const range = document.createRange();
+      range.selectNodeContents(caption.querySelector("blockquote"));
+      getSelection().removeAllRanges();
+      getSelection().addRange(range);
+      done("Selected", "The quote is selected: copy it with your device's copy command.");
+    };
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => done("Copied", "Quote copied."), selectIt);
+    else selectIt();
+  });
 
   // ---------- controls ----------
   const swatches = document.getElementById("swatches");
