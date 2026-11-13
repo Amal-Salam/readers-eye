@@ -278,6 +278,17 @@
   #list span { display: block; margin-top: var(--space-1); font: 12px/16px var(--font-mono); letter-spacing: .06em; color: var(--ink-muted); }
   #list cite { font-style: normal; color: var(--accent); }
 
+  .noscript {
+    margin: var(--space-6) 0 0;
+    max-width: var(--measure-text);
+    padding: var(--space-4) var(--space-5);
+    background: var(--ground-raised);
+    border-top: 1px solid var(--rule);
+    font: 17px/26px var(--font-sans);
+    color: var(--ink);
+    text-align: center;
+  }
+
   @media (max-width: 499px) {
     .caption { min-height: calc(48px + 2 * var(--space-3) + 5 * 1.16 * 26px); }
     .wrap { padding-block: var(--space-6) var(--space-7); }
@@ -295,6 +306,11 @@
     <h1>The Reader's Eye</h1>
     <p class="lede">Every fibre, vessel, lash and fold of this eye is a line from a book.</p>
   </header>
+
+  <noscript>
+    <style>.stage, .hints, .caption, .controls, details { display: none; }</style>
+    <p class="noscript">The eye is drawn line by line in your browser, so it needs JavaScript. Turn JavaScript on for this page to see it and read its quotes.</p>
+  </noscript>
 
   <div class="stage" id="stage">
     <div class="eye" id="eye" tabindex="0" role="img"
